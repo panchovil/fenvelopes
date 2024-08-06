@@ -1,6 +1,6 @@
 module dtypes
    use constants, only: pr
-   use io
+   use ftools__io
 
    implicit none
 

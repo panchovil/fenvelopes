@@ -1,0 +1,37 @@
+! Namelist based input file
+! =========================
+!
+! Units:
+!  - Pressure: bar
+!  - Temperature: K
+!  - Volume: L
+! =========================
+
+&nml_setup
+    nc=3,                ! Number of components
+    model="SRK",        ! SRK PR76 PR78 RKPR
+    mixrule="ClassicVdW" ! ClassicVdW 
+/
+
+&nml_composition
+    names="CO2" "C1-N2" "C2-C3"
+    spec="critical", ! critical or parameters
+    z=0.4 0.3 0.3
+/
+
+&nml_classicvdw
+    kij(1, :)=0 0 0
+    kij(2, :)=0 0 0
+    kij(3, :)=0 0 0
+
+    lij(1, :)=0 0 0
+    lij(2, :)=0 0 0
+    lij(3, :)=0 0 0
+/
+
+&nml_critical
+    tc=304.0390 189.4280 339.8720
+    pc=73.7900 45.8300 45.4100
+    w=0.225000 0.008500 0.127100
+/
+

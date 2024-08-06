@@ -227,6 +227,71 @@ contains
       df(n + 2, ns) = 1
    end subroutine F2
 
+   subroutine F2mod(incipient, z, y, X, S, ns, F, dF, Vx, Vy)
+      character(len=*), intent(in) :: incipient
+      real(pr), intent(in) :: z(:)
+      real(pr), intent(in) :: X(nc + 2)
+      real(pr), intent(in) :: y(nc)
+      real(pr), intent(in) :: S
+      integer, intent(in) :: ns
+
+      real(pr), intent(out) :: F(nc + 2)
+      real(pr), intent(out) :: dF(nc + 2, nc + 2)
+      real(pr), intent(out) :: Vx, Vy
+
+      real(pr) :: lnfug_x(nc), lnfug_y(nc)
+      real(pr) :: dlnphi_dt_x(nc), dlnphi_dt_y(nc)
+      real(pr) :: dlnphi_dp_x(nc), dlnphi_dp_y(nc)
+      real(pr) :: dlnphi_dn_x(nc, nc), dlnphi_dn_y(nc, nc)
+
+      real(pr) :: T, P
+
+      integer :: ix, iy, n, j
+
+      n = size(z)
+      F = 0
+      dF = 0
+
+      T = exp(X(n+1))
+      P = exp(X(n+2))
+
+      select case(incipient)
+      case ("liquid")
+         ix = -1
+         iy = 1
+      case ("vapor")
+         ix = 1
+         iy = -1
+      case ("2ndliquid")
+         ix = 1
+         iy = 1
+      case default
+         ix = 0
+         iy = 0
+      end select
+
+      call TERMO(n, iy, 4, T, P, y, Vy, lnfug_y, dlnphi_dp_y, dlnphi_dt_y, dlnphi_dn_y)
+      call TERMO(n, ix, 2, T, P, z, Vx, lnfug_x, dlnphi_dp_x, dlnphi_dt_x, dlnphi_dn_x)
+
+      F(:n) = X(:n) + lnfug_y - lnfug_x  ! X(:n) are LOG_K
+      F(n + 1) = sum(y - z)
+      F(n + 2) = X(ns) - S
+
+      ! Jacobian Matrix
+      do j=1,n
+         df(:n, j) = dlnphi_dn_y(:, j) * y(j)
+         df(j, j) = dF(j, j) + 1
+      end do
+
+      df(:n, n + 1) = T * (dlnphi_dt_y - dlnphi_dt_x)
+      df(:n, n + 2) = P * (dlnphi_dp_y - dlnphi_dp_x)
+
+      df(n + 1, :n) = y
+
+      df(n + 2, :) = 0
+      df(n + 2, ns) = 1
+   end subroutine F2mod
+
    subroutine fix_delx(&
          point, iterations, desired_iterations, first_tol, tol, delX &
       )
@@ -296,7 +361,7 @@ contains
       use dtypes, only: envelope, critical_point
       use linalg, only: point, solve_system
       use constants, only: ouput_path
-      use io, only: str
+      use ftools__io
       implicit none
 
       ! number of compounds in the system and starting point type
@@ -823,7 +888,7 @@ contains
 
    subroutine pt_envelope_three_phase(X0, spec_number, del_S0, envel)
       use constants, only: ouput_path
-      use io, only: str
+      use ftools__io
       !! Subroutine to calculate Px phase envelopes via continuation method.
       !! Three phases version.
       real(pr), intent(in) :: X0(:) !! Vector of variables

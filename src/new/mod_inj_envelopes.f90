@@ -144,7 +144,7 @@ contains
    subroutine injection_envelope(X0, spec_number, del_S0, envels)
       !! Subroutine to calculate Px phase envelopes via continuation method
       use constants, only: ouput_path
-      use io, only: str
+      use ftools__io
       real(pr), intent(in) :: X0(:) !! Vector of variables
       integer, intent(in) :: spec_number !! Number of specification
       real(pr), intent(in) :: del_S0 !! \(\Delta S_0\)
@@ -525,7 +525,7 @@ contains
 
    subroutine injection_envelope_three_phase(X0, spec_number, del_S0, envels)
       use constants, only: ouput_path
-      use io, only: str
+      use ftools__io
       !! Subroutine to calculate Px phase envelopes via continuation method.
       !! Three phases version.
       real(pr), intent(in) :: X0(:) !! Vector of variables

@@ -49,7 +49,7 @@ module io_nml
                    & ac, b, k, &
                    & kij, lij, bij, &
                    & setup, SRK_factory, PR76_factory, PR78_factory
-   use io, only: str
+   use ftools__io
    implicit none
    integer :: nunit_input
 
