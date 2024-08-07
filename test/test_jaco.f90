@@ -86,7 +86,8 @@ contains
         !   pt_bub &
         !)    
         print*, "-----------------------Nano-------------------------------"
-        call Prueba_nano(1,nc,z,T,Pliq,Pvap,k)
+        !call Prueba_nano(1,nc,z,T,Pliq,Pvap,k)
+        !call pepe
 
     end subroutine
     subroutine iniciador_bulk(ichoice, n, z, T, P, KFACT, Vx, Vy) ! This will probably always exist
@@ -470,9 +471,9 @@ contains
                AJ = JAC
                delX = solve_system(AJ, bd)
                call fix_delX(i, iter, 3, 10.0_pr, 0.08_pr, delX)
-   
+               !print*, "del x",delX
                X = X + delX
-   
+                !print*, "x", x
                if (.not. passingcri .and. i /= 1 &
                    .and. iter > 10 &
                    .and. maxval(abs(delX)) > 0.001) then 
@@ -489,8 +490,8 @@ contains
                Pliq = X(n + 2)
                Pvap = X(n + 3)
                
-               print*, "convergencia nano", F
-               print*, "Pcap", Pcap
+               !print*, "convergencia nano", F
+               !print*, "Pcap", Pcap
 
             end do
             ! Point converged (unless it jumped out because of high number of iterations)
@@ -585,8 +586,8 @@ contains
   
         ! Jacobian Matrix
         do j=1,n
-           df(:n, j) = dlnphi_dn_y(:, j) * y(j)
-           df(j, j) = dF(j, j) + 1
+           df(:n, j) = dlnphi_dn_y(:, j) * y(j) + 1.0
+           !df(j, j) = dF(j, j) + 1.0
         end do
   
         df(:n, n + 1) = T * (dlnphi_dt_y - dlnphi_dt_x)
@@ -608,9 +609,9 @@ contains
         dV_x_dT = -(dPliq_dT_x/dPliq_dV_x)
         dV_y_dT = -(dPvap_dT_y/dPvap_dV_y)
         do i=1,n
-            var_dFn2_dT = var_dFn2_dT+(Par(i)/1000.0*((y(i)*dV_y_dT/(Vy**2))-(z(i)*dV_x_dT/(Vx**2))))
+            var_dFn2_dT = var_dFn2_dT+(Par(i)/1000.0*((y(i)*dV_y_dT/(Vy**2.0))-(z(i)*dV_x_dT/(Vx**2.0))))
         end do
-        df(n + 2, n + 1) = 0.00000001*var_dFn2*var_dFn2_dT
+        df(n + 2, n + 1) = 0.00000001*var_dFn2*T*var_dFn2_dT
         do i=1,n
             var_dFn2_dPliq = var_dFn2_dPliq + (-Par(i)/1000.0*z(i))
             var_dFn2_dPvap = var_dFn2_dPvap + (Par(i)/1000.0*y(i))
@@ -618,16 +619,43 @@ contains
         df(n + 2, n + 2) = 1.0 + 0.00000001*var_dFn2*var_dFn2_dPliq*(1.0/(dPliq_dV_x*(Vx**2.0))) 
         df(n + 2, n + 3) = - 1.0 + 0.00000001*var_dFn2*var_dFn2_dPvap*(1.0/(dPvap_dV_y*(Vy**2.0)))
 
-        df(n + 3, :) = 0
-        df(n + 3, ns) = 1
+        df(n + 3, :) = 0.0
+        df(n + 3, ns) = 1.0
 
         if (present(Pcapilar)) Pcapilar=Pcap
         if (present(Vliq)) Vliq=Vx
         If (present(Vvap)) Vvap=Vy
 
     end subroutine Fnano
+    subroutine pepe
+        integer :: j,n,p,i
+        real :: df(4,4),asd(4,4)
+        n=4
+        ! Jacobian Matrix
+        p=0
+        do i=1,n
+            do j=1,n
+                p=p+1
+                asd(i,j)=p
+            end do
+        end do
+        do j=1,n
+            df(:n, j) = asd(:, j)+ 0.1
+            !df(j, j) = dF(j, j) + 0.1
+        end do
+        print*, asd(1,1),asd(1,2),asd(1,3),asd(1,4)
+        print*, asd(2,1),asd(2,2),asd(2,3),asd(2,4)
+        print*, asd(3,1),asd(3,2),asd(3,3),asd(3,4)
+        print*, asd(4,1),asd(4,2),asd(4,3),asd(4,4)
 
+        print*, "------------------------------------"
 
+        print*, df(1,1),df(1,2),df(1,3),df(1,4)
+        print*, df(2,1),df(2,2),df(2,3),df(2,4)
+        print*, df(3,1),df(3,2),df(3,3),df(3,4)
+        print*, df(4,1),df(4,2),df(4,3),df(4,4)
+        !print*, df
+    end subroutine pepe
   
 
 end program main
