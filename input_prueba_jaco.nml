@@ -34,3 +34,10 @@
     pc=45.99 13.72 18.11
     w=0.0115 1.313 1.274
 /
+
+&nml_px ! Px envelopes relevant info
+    T=350.0   
+    z_0=0.621476711621686 0.294896838294686 0.0836264500836264 
+    z_injection=1.0 0.0 0.0
+    injection_case="displace" ! [dilute|displace]
+/
