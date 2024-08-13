@@ -163,13 +163,14 @@ contains
       X(n + 2) = log(P)
    end function
 
-   subroutine F2(incipient, z, y, X, S, ns, F, dF)
+   subroutine F2(incipient, z, y, X, S, ns, F, dF, V_x, V_y)
       character(len=*), intent(in) :: incipient
       real(pr), intent(in) :: z(:)
       real(pr), intent(in) :: X(nc + 2)
       real(pr), intent(in) :: y(nc)
       real(pr), intent(in) :: S
       integer, intent(in) :: ns
+      real(pr), optional, intent(out) :: V_x, V_y
 
       real(pr), intent(out) :: F(nc + 2)
       real(pr), intent(out) :: dF(nc + 2, nc + 2)
@@ -225,72 +226,11 @@ contains
 
       df(n + 2, :) = 0
       df(n + 2, ns) = 1
+      if (present(V_x)) V_x=Vx
+      if (present(V_y)) V_y=Vy
    end subroutine F2
 
-   subroutine F2mod(incipient, z, y, X, S, ns, F, dF, Vx, Vy)
-      character(len=*), intent(in) :: incipient
-      real(pr), intent(in) :: z(:)
-      real(pr), intent(in) :: X(nc + 2)
-      real(pr), intent(in) :: y(nc)
-      real(pr), intent(in) :: S
-      integer, intent(in) :: ns
 
-      real(pr), intent(out) :: F(nc + 2)
-      real(pr), intent(out) :: dF(nc + 2, nc + 2)
-      real(pr), intent(out) :: Vx, Vy
-
-      real(pr) :: lnfug_x(nc), lnfug_y(nc)
-      real(pr) :: dlnphi_dt_x(nc), dlnphi_dt_y(nc)
-      real(pr) :: dlnphi_dp_x(nc), dlnphi_dp_y(nc)
-      real(pr) :: dlnphi_dn_x(nc, nc), dlnphi_dn_y(nc, nc)
-
-      real(pr) :: T, P
-
-      integer :: ix, iy, n, j
-
-      n = size(z)
-      F = 0
-      dF = 0
-
-      T = exp(X(n+1))
-      P = exp(X(n+2))
-
-      select case(incipient)
-      case ("liquid")
-         ix = -1
-         iy = 1
-      case ("vapor")
-         ix = 1
-         iy = -1
-      case ("2ndliquid")
-         ix = 1
-         iy = 1
-      case default
-         ix = 0
-         iy = 0
-      end select
-
-      call TERMO(n, iy, 4, T, P, y, Vy, lnfug_y, dlnphi_dp_y, dlnphi_dt_y, dlnphi_dn_y)
-      call TERMO(n, ix, 2, T, P, z, Vx, lnfug_x, dlnphi_dp_x, dlnphi_dt_x, dlnphi_dn_x)
-
-      F(:n) = X(:n) + lnfug_y - lnfug_x  ! X(:n) are LOG_K
-      F(n + 1) = sum(y - z)
-      F(n + 2) = X(ns) - S
-
-      ! Jacobian Matrix
-      do j=1,n
-         df(:n, j) = dlnphi_dn_y(:, j) * y(j)
-         df(j, j) = dF(j, j) + 1
-      end do
-
-      df(:n, n + 1) = T * (dlnphi_dt_y - dlnphi_dt_x)
-      df(:n, n + 2) = P * (dlnphi_dp_y - dlnphi_dp_x)
-
-      df(n + 1, :n) = y
-
-      df(n + 2, :) = 0
-      df(n + 2, ns) = 1
-   end subroutine F2mod
 
    subroutine fix_delx(&
          point, iterations, desired_iterations, first_tol, tol, delX &
@@ -1209,4 +1149,110 @@ contains
       end do
       ! ===========================================================================
    end subroutine
+   ! ===========================================================================
+
+   ! ===========================================================================
+   !  Capilar Pressure
+   ! ---------------------------------------------------------------------------
+   subroutine Fnano(incipient, z, y, X, S, ns, F, dF,IFT, r_poro, ang_cont, Pcap, Par, Vx, Vy)
+      character(len=*), intent(in) :: incipient
+      real(pr), intent(in) :: z(:)
+      real(pr), intent(in) :: X(nc + 3)
+      real(pr), intent(in) :: y(nc)
+      real(pr), intent(in) :: S
+      integer, intent(in) :: ns
+
+      real(pr), intent(out) :: F(nc + 3)
+      real(pr), intent(out) :: dF(nc + 3, nc + 3)
+      real(pr), intent(out) :: Vx, Vy
+
+      real(pr) :: lnfug_x(nc), lnfug_y(nc)
+      real(pr) :: dlnphi_dt_x(nc), dlnphi_dt_y(nc)
+      real(pr) :: dlnphi_dp_x(nc), dlnphi_dp_y(nc)
+      real(pr) :: dlnphi_dn_x(nc, nc), dlnphi_dn_y(nc, nc)
+
+      real(pr) :: T, Pliq, Pvap
+
+      integer :: ix, iy, n, j, i
+      
+      ! Capilar Preasure variables
+      !real(pr), optional, intent(out) ::  Pcapilar, Vliq, Vvap
+      real(pr), intent(in) :: IFT, r_poro, ang_cont, Pcap, Par(nc) 
+      real(pr) :: dPvap_dV_y, dPliq_dV_x, dV_x_dT, dV_y_dT
+      real(pr) :: dV_y_dn_y(nc)
+      
+      !Capilar jacobian intermediate variables
+      real(pr) :: var_dFn2, var_dFn2_dK, var_dFn2_dT, var_dFn2_dPliq, var_dFn2_dPvap
+
+      n = size(z)
+      F = 0
+      dF = 0
+
+      T = exp(X(n+1))
+      Pliq = X(n+2)
+      Pvap = X(n+3)
+
+      select case(incipient)
+      case ("liquid")
+         ix = -1
+         iy = 1
+      case ("vapor")
+         ix = 1
+         iy = -1
+      case ("2ndliquid")
+         ix = 1
+         iy = 1
+      case default
+         ix = 0
+         iy = 0
+      end select
+
+      call TERMO(n, iy, 4, T, Pvap, y, Vy, lnfug_y, dlnphi_dp_y, dlnphi_dt_y, dlnphi_dn_y,&
+      dp_dv=dPvap_dV_y, dV_dT=dV_y_dT, dV_dn=dV_y_dn_y)
+      call TERMO(n, ix, 2, T, Pliq, z, Vx, lnfug_x, dlnphi_dp_x, dlnphi_dt_x, dlnphi_dn_x,&
+      dp_dv=dPliq_dV_x, dV_dT=dV_x_dT)
+
+      F(:n) = X(:n) + lnfug_y - lnfug_x  ! X(:n) are LOG_K
+      F(n + 1) = sum(y - z)
+      F(n + 2) = Pliq - Pvap + Pcap
+      F(n + 3) = X(ns) - S
+
+      ! Jacobian Matrix
+      do j=1,n
+         df(:n, j) = dlnphi_dn_y(:, j) * y(j)
+         df(j, j) = dF(j, j) + 1.0
+      end do
+
+      df(:n, n + 1) = T * (dlnphi_dt_y - dlnphi_dt_x)
+      df(:n, n + 2) = -(1.0/Pliq) - (dlnphi_dp_x)
+      df(:n, n + 3) = (1.0/Pvap) + (dlnphi_dp_y)
+
+      df(n + 1, :n) = y
+      
+      var_dFn2 = (8.0*cos(ang_cont)/r_poro)*(IFT**3.0)
+
+      do i=1,n
+          var_dFn2_dK = var_dFn2_dK+(Par(i)/1000.0*((y(i)*dV_y_dn_y(i)/(Vy**2.0))-(1.0/Vy)))
+      end do
+      do i=1,n
+          df(n + 2, i) = 0.00000001*y(i)*var_dFn2*var_dFn2_dK
+      end do
+
+      do i=1,n
+          var_dFn2_dT = var_dFn2_dT+(Par(i)/1000.0*((y(i)*dV_y_dT/(Vy**2.0))-(z(i)*dV_x_dT/(Vx**2.0))))
+      end do
+      df(n + 2, n + 1) = 0.00000001*var_dFn2*T*var_dFn2_dT
+      do i=1,n
+          var_dFn2_dPliq = var_dFn2_dPliq + (-Par(i)/1000.0*z(i))
+          var_dFn2_dPvap = var_dFn2_dPvap + (Par(i)/1000.0*y(i))
+      end do
+      df(n + 2, n + 2) = 1.0 + 0.00000001*var_dFn2*var_dFn2_dPliq*(1.0/(dPliq_dV_x*(Vx**2.0))) 
+      df(n + 2, n + 3) = - 1.0 + 0.00000001*var_dFn2*var_dFn2_dPvap*(1.0/(dPvap_dV_y*(Vy**2.0)))
+
+      df(n + 3, :) = 0.0
+      df(n + 3, ns) = 1.0
+
+
+  end subroutine Fnano
+
 end module envelopes

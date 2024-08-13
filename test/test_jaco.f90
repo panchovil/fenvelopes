@@ -6,7 +6,7 @@ program main
     use io_nml, only: read_system
     
     implicit none
-    character(len=*), parameter :: infile="test/input_prueba_jaco.nml"
+    character(len=*), parameter :: infile="input.nml"!infile="test/input_prueba_jaco.nml"
     real(pr) :: pt_bub_t0 = 180
     real(pr) :: pt_dew_t0 = 180
 
@@ -87,9 +87,9 @@ contains
         !)    
         print*, "-----------------------Nano-------------------------------"
         call Prueba_nano(1,nc,z,T,Pliq,Pvap,k,Vliq=Vx,Vvap=Vy)
-        !call pepe
-        print*, Par/1000.0
-
+        !print*, Par/1000.0
+        !print*, 1.0E-11
+        !print*, 0.00000001/1000.0
 
     end subroutine
     subroutine iniciador_bulk(ichoice, n, z, T, P, KFACT, Vx, Vy) ! This will probably always exist
@@ -337,10 +337,10 @@ contains
         end do
         IFT=0.0
         !print*, "Par", Par/1000
-        Par = (/0.07405, 2.76, 3.2/)
-        do i=1,nc
-            Par(i) = Par(i)*1000.0
-        end do
+        !Par = (/0.07405, 2.76, 3.2/)
+        !do i=1,nc
+        !    Par(i) = Par(i)*1000.0
+        !end do
         !print*, Par
         !IFT (mN/m)^1/4
         do i=1,nc
@@ -557,7 +557,6 @@ contains
         integer :: ix, iy, n, j, i
         
         ! Capilar Preasure variables
-        !real(pr), optional, intent(out) ::  Pcapilar, Vliq, Vvap
         real(pr), intent(in) :: IFT, r_poro, ang_cont, Pcap, Par(nc) 
         real(pr) :: dPvap_dV_y, dPliq_dV_x, dV_x_dT, dV_y_dT
         real(pr) :: dV_y_dn_y(nc)
@@ -589,89 +588,43 @@ contains
         end select
   
         call TERMO(n, iy, 4, T, Pvap, y, Vy, lnfug_y, dlnphi_dp_y, dlnphi_dt_y, dlnphi_dn_y,&
-        dp_dv=dPvap_dV_y, dV_dT=dV_y_dT, dV_dn=dV_y_dn_y)! dPvap_dV_y, dPvap_dT_y, dPvap_dn_y
+        dp_dv=dPvap_dV_y, dV_dT=dV_y_dT, dV_dn=dV_y_dn_y)
         call TERMO(n, ix, 2, T, Pliq, z, Vx, lnfug_x, dlnphi_dp_x, dlnphi_dt_x, dlnphi_dn_x,&
-        dp_dv=dPliq_dV_x, dV_dT=dV_x_dT)! dPliq_dV_x, dPliq_dT_x, dPliq_dn_x)
-        !call Laplace(r_poro,ang_cont,Vx,Vy,exp(X(:n)),IFT,Pcap,Parachor=Par)
+        dp_dv=dPliq_dV_x, dV_dT=dV_x_dT)
 
         F(:n) = X(:n) + lnfug_y - lnfug_x  ! X(:n) are LOG_K
         F(n + 1) = sum(y - z)
         F(n + 2) = Pliq - Pvap + Pcap
         F(n + 3) = X(ns) - S
-        !print*, Pvap, Pliq
-        !print*, F
+        ! Jacobian intermediate variables
+        var_dFn2 = 1.0E-11*(8._pr*cos(ang_cont)/r_poro)*(IFT**3) ! 1.0E-11 is an unit conversion 
+        do i=1,n
+            var_dFn2_dK = var_dFn2_dK+(Par(i)*((y(i)*dV_y_dn_y(i)/(Vy**2))-(1._pr/Vy)))
+            var_dFn2_dT = var_dFn2_dT+(Par(i)*((y(i)*dV_y_dT/(Vy**2))-(z(i)*dV_x_dT/(Vx**2))))
+            var_dFn2_dPliq = var_dFn2_dPliq + (-Par(i)*z(i))
+            var_dFn2_dPvap = var_dFn2_dPvap + (Par(i)*y(i))
+        end do
         ! Jacobian Matrix
         do j=1,n
            df(:n, j) = dlnphi_dn_y(:, j) * y(j)
-           df(j, j) = dF(j, j) + 1.0
+           df(j, j) = dF(j, j) + 1._pr
         end do
   
         df(:n, n + 1) = T * (dlnphi_dt_y - dlnphi_dt_x)
-        df(:n, n + 2) = -(1.0/Pliq) - (dlnphi_dp_x)
-        df(:n, n + 3) = (1.0/Pvap) + (dlnphi_dp_y)
+        df(:n, n + 2) = -(1._pr/Pliq) - (dlnphi_dp_x)
+        df(:n, n + 3) = (1._pr/Pvap) + (dlnphi_dp_y)
   
         df(n + 1, :n) = y
         
-        var_dFn2 = (8.0*cos(ang_cont)/r_poro)*(IFT**3.0)
+        df(n + 2, :n) = y*var_dFn2*var_dFn2_dK
+        df(n + 2, n + 1) = var_dFn2*T*var_dFn2_dT
+        df(n + 2, n + 2) = 1._pr + var_dFn2*var_dFn2_dPliq*(1._pr/(dPliq_dV_x*(Vx**2))) 
+        df(n + 2, n + 3) = - 1._pr + var_dFn2*var_dFn2_dPvap*(1._pr/(dPvap_dV_y*(Vy**2)))
 
-        do i=1,n
-            var_dFn2_dK = var_dFn2_dK+(Par(i)/1000.0*((y(i)*dV_y_dn_y(i)/(Vy**2.0))-(1.0/Vy)))
-        end do
-        do i=1,n
-            df(n + 2, i) = 0.00000001*y(i)*var_dFn2*var_dFn2_dK
-        end do
-
-        do i=1,n
-            var_dFn2_dT = var_dFn2_dT+(Par(i)/1000.0*((y(i)*dV_y_dT/(Vy**2.0))-(z(i)*dV_x_dT/(Vx**2.0))))
-        end do
-        df(n + 2, n + 1) = 0.00000001*var_dFn2*T*var_dFn2_dT
-        do i=1,n
-            var_dFn2_dPliq = var_dFn2_dPliq + (-Par(i)/1000.0*z(i))
-            var_dFn2_dPvap = var_dFn2_dPvap + (Par(i)/1000.0*y(i))
-        end do
-        df(n + 2, n + 2) = 1.0 + 0.00000001*var_dFn2*var_dFn2_dPliq*(1.0/(dPliq_dV_x*(Vx**2.0))) 
-        df(n + 2, n + 3) = - 1.0 + 0.00000001*var_dFn2*var_dFn2_dPvap*(1.0/(dPvap_dV_y*(Vy**2.0)))
-
-        df(n + 3, :) = 0.0
-        df(n + 3, ns) = 1.0
-
-        !if (present(Pcapilar)) Pcapilar=Pcap
-        !if (present(Vliq)) Vliq=Vx
-        !If (present(Vvap)) Vvap=Vy
-
+        df(n + 3, :) = 0._pr
+        df(n + 3, ns) = 1._pr
     end subroutine Fnano
 
-
-
-    subroutine pepe
-        integer :: j,n,p,i
-        real :: df(4,4),asd(4,4)
-        n=4
-        ! Jacobian Matrix
-        p=0
-        do i=1,n
-            do j=1,n
-                p=p+1
-                asd(i,j)=p
-            end do
-        end do
-        do j=1,n
-            df(:n, j) = asd(:, j) + 0.1
-            !df(j, j) = dF(j, j) + 0.1
-        end do
-        print*, asd(1,1),asd(1,2),asd(1,3),asd(1,4)
-        print*, asd(2,1),asd(2,2),asd(2,3),asd(2,4)
-        print*, asd(3,1),asd(3,2),asd(3,3),asd(3,4)
-        print*, asd(4,1),asd(4,2),asd(4,3),asd(4,4)
-
-        print*, "------------------------------------"
-
-        print*, df(1,1),df(1,2),df(1,3),df(1,4)
-        print*, df(2,1),df(2,2),df(2,3),df(2,4)
-        print*, df(3,1),df(3,2),df(3,3),df(3,4)
-        print*, df(4,1),df(4,2),df(4,3),df(4,4)
-        !print*, df
-    end subroutine pepe
   
 
 end program main
